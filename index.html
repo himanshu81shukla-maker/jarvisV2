@@ -423,7 +423,11 @@
     <div class="field"><label for="setCity">Your city (for briefings)</label><input type="text" id="setCity" placeholder="e.g. Varanasi"></div>
     <div class="field" id="keyField" hidden><label for="setKey">API key — Anthropic or NVIDIA (stays on this device)</label><input type="password" id="setKey" placeholder="sk-ant-… or nvapi-…" autocomplete="off"></div>
     <div class="field" id="relayField" hidden><label for="setRelay">NVIDIA relay URL (optional — built-in relay used if blank)</label><input type="text" id="setRelay" placeholder="https://jarvis-relay.YOUR-NAME.workers.dev" autocomplete="off"></div>
-    <div class="field" id="modelField" hidden><label for="setModel">NVIDIA model (blank = Llama 3.3 70B)</label><input type="text" id="setModel" placeholder="meta/llama-3.3-70b-instruct" autocomplete="off"></div>
+    <div class="field" id="modelField" hidden><label for="setModel">NVIDIA model</label><select id="setModel">
+      <option value="">Llama 3.1 8B — fast (recommended)</option>
+      <option value="meta/llama-3.3-70b-instruct">Llama 3.3 70B — smarter, slower</option>
+      <option value="nvidia/llama-3.1-nemotron-70b-instruct">Nemotron 70B — NVIDIA tuned</option>
+    </select></div>
     <div class="field"><label for="setVoice">Voice</label><div style="display:flex;gap:8px"><select id="setVoice" style="flex:1;min-width:0"><option value="">Auto (recommended)</option></select><button class="cbtn" id="voiceTest" aria-label="Preview selected voice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button></div></div>
     <div class="toggle-row"><span>Spoken replies</span><button class="switch" id="setSpeak" role="switch" aria-checked="true" aria-label="Toggle spoken replies"></button></div>
     <button class="save-btn" id="linkTest" style="background:transparent" hidden>Run link diagnostic</button>
@@ -576,7 +580,7 @@ function provider(){
   if(!STANDALONE) return 'anthropic-proxy';
   return (state.profile.apiKey||'').startsWith('nvapi-') ? 'nvidia' : 'anthropic';
 }
-const NVIDIA_DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct';
+const NVIDIA_DEFAULT_MODEL = 'meta/llama-3.1-8b-instruct';
 const DEFAULT_RELAY = 'https://jarvis-relay.hiresmartai.workers.dev';
 function fetchT(url, opts={}, ms=60000){
   const ctl = new AbortController();
@@ -733,7 +737,7 @@ async function send(text, {spoken=false} = {}){
     const msg = (e && e.message === 'AUTH')
       ? 'The mainframe rejected the API key. Check it in settings — Anthropic keys start with "sk-ant-", NVIDIA keys with "nvapi-".'
       : (e && e.message === 'TIMEOUT')
-      ? 'The mainframe took too long to respond (60s) and I cut the line. This is usually a slow model spin-up or weak signal — try once more.'
+      ? 'The mainframe took too long to respond (60s) and I cut the line — NVIDIA\'s free tier queues under load. Wait a moment and try again.'
       : (e && e.message === 'CORS')
       ? 'I couldn\'t reach the relay. Check your signal and try again — and run **settings → link diagnostic** to see exactly which step fails.'
       : 'Connection to the mainframe failed — check your network and try again.';
@@ -1073,7 +1077,7 @@ $('#linkTest').addEventListener('click', async function(){
       const r = await callClaude([{role:'user', content:'Reply with exactly one word: ONLINE'}], {maxTokens:12});
       lines.push(good('AI replied: "' + esc(r.slice(0,30)) + '" — LINK FULLY OPERATIONAL'));
     }catch(e){
-      if(e.message === 'TIMEOUT') lines.push(bad('No answer within 60s. Usually a model spin-up or slow network — run the diagnostic again; if it repeats, try model "meta/llama-3.1-8b-instruct" (faster) in the model field.'));
+      if(e.message === 'TIMEOUT') lines.push(bad('No answer within 60s. Free-tier models queue under load (40 req/min limit) — wait a minute and run this again. The fast 8B model (default) times out far less than the 70B options.'));
       else if(e.message === 'CORS') lines.push(bad('Could not reach the relay at all — likely no signal, or the relay URL above is mistyped.'));
       else if(e.message === 'AUTH') lines.push(bad('Key rejected (401). The key is wrong, expired, or was regenerated — create a fresh one at build.nvidia.com and paste it above.'));
       else if(/404/.test(e.message||'')) lines.push(bad('Model not found (404). Clear the NVIDIA model field to use the default.'));
