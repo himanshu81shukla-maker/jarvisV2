@@ -800,8 +800,11 @@ function loadVoices(){
   voices = speechSynthesis.getVoices();
   const sel = $('#setVoice');
   const cur = state.profile.voiceURI;
-  sel.innerHTML = '<option value="">Auto (recommended)</option>' + voices
-    .filter(v => v.lang.startsWith('en'))
+  const seen = new Set();
+  const en = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('en'))
+    .filter(v => { const k = v.name + '|' + v.lang; if(seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a,b) => (b.lang.includes('GB') ? 1 : 0) - (a.lang.includes('GB') ? 1 : 0));
+  sel.innerHTML = '<option value="">Auto (recommended)</option>' + en
     .map(v => `<option value="${esc(v.voiceURI)}" ${v.voiceURI===cur?'selected':''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('');
 }
 if('speechSynthesis' in window){
@@ -837,7 +840,9 @@ function speak(text){
   try{
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(stripForSpeech(text));
-    const v = pickVoice(); if(v) u.voice = v;
+    const v = pickVoice();
+    if(v){ u.voice = v; u.lang = v.lang; }   /* Android ignores voice unless lang matches it */
+    else u.lang = 'en-GB';
     u.rate = 1.02; u.pitch = 0.92;
     u.onstart = ()=> setCore('speaking');
     u.onend = ()=> setCore('idle');
@@ -1093,8 +1098,9 @@ $('#voiceTest').addEventListener('click', () => {
   if(!('speechSynthesis' in window)){ toast('Speech not supported in this browser', 'gold'); return; }
   loadVoices();
   const u = new SpeechSynthesisUtterance('Good evening. I am JARVIS — this is the voice you have selected.');
-  const v = voices.find(v => v.voiceURI === $('#setVoice').value);
-  if(v) u.voice = v; else { const a = pickVoice(); if(a) u.voice = a; }
+  const v = voices.find(v => v.voiceURI === $('#setVoice').value) || pickVoice();
+  if(v){ u.voice = v; u.lang = v.lang; }   /* Android ignores voice unless lang matches it */
+  else u.lang = 'en-GB';
   u.rate = 1.02; u.pitch = 0.92;
   speechSynthesis.cancel(); speechSynthesis.speak(u);
 });
