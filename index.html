@@ -422,7 +422,7 @@
     <div class="field"><label for="setName">How JARVIS addresses you</label><input type="text" id="setName" placeholder="e.g. sir, boss, Priya…"></div>
     <div class="field"><label for="setCity">Your city (for briefings)</label><input type="text" id="setCity" placeholder="e.g. Varanasi"></div>
     <div class="field" id="keyField" hidden><label for="setKey">API key — Anthropic or NVIDIA (stays on this device)</label><input type="password" id="setKey" placeholder="sk-ant-… or nvapi-…" autocomplete="off"></div>
-    <div class="field" id="relayField" hidden><label for="setRelay">NVIDIA relay URL (fixes "network error" — see README)</label><input type="text" id="setRelay" placeholder="https://jarvis-relay.YOUR-NAME.workers.dev" autocomplete="off"></div>
+    <div class="field" id="relayField" hidden><label for="setRelay">NVIDIA relay URL (optional — built-in relay used if blank)</label><input type="text" id="setRelay" placeholder="https://jarvis-relay.YOUR-NAME.workers.dev" autocomplete="off"></div>
     <div class="field" id="modelField" hidden><label for="setModel">NVIDIA model (blank = Llama 3.3 70B)</label><input type="text" id="setModel" placeholder="meta/llama-3.3-70b-instruct" autocomplete="off"></div>
     <div class="field"><label for="setVoice">Voice</label><div style="display:flex;gap:8px"><select id="setVoice" style="flex:1;min-width:0"><option value="">Auto (recommended)</option></select><button class="cbtn" id="voiceTest" aria-label="Preview selected voice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button></div></div>
     <div class="toggle-row"><span>Spoken replies</span><button class="switch" id="setSpeak" role="switch" aria-checked="true" aria-label="Toggle spoken replies"></button></div>
@@ -577,6 +577,12 @@ function provider(){
   return (state.profile.apiKey||'').startsWith('nvapi-') ? 'nvidia' : 'anthropic';
 }
 const NVIDIA_DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct';
+const DEFAULT_RELAY = 'https://jarvis-relay.hiresmartai.workers.dev';
+function fetchT(url, opts={}, ms=60000){
+  const ctl = new AbortController();
+  const t = setTimeout(()=> ctl.abort(), ms);
+  return fetch(url, {...opts, signal: ctl.signal}).finally(()=> clearTimeout(t));
+}
 function personaPrompt(){
   const p = state.profile;
   const now = new Date();
@@ -607,15 +613,15 @@ async function callClaude(messages, {tools=null, system=null, maxTokens=1000} = 
     const nimMessages = system ? [{role:'system', content:system}, ...messages] : messages;
     let res;
     try{
-      const endpoint = (state.profile.relay || '').trim() || 'https://integrate.api.nvidia.com/v1/chat/completions';
-      res = await fetch(endpoint, {
+      const endpoint = (state.profile.relay || '').trim() || DEFAULT_RELAY;
+      res = await fetchT(endpoint, {
         method:'POST',
         headers:{ 'Content-Type':'application/json', 'Accept':'application/json',
                   'Authorization':'Bearer ' + state.profile.apiKey },
         body: JSON.stringify({ model: state.profile.model || NVIDIA_DEFAULT_MODEL,
                                messages: nimMessages, max_tokens: maxTokens, temperature: 0.6 })
       });
-    }catch(e){ throw new Error('CORS'); }
+    }catch(e){ throw new Error(e && e.name === 'AbortError' ? 'TIMEOUT' : 'CORS'); }
     if(res.status === 401 || res.status === 403) throw new Error('AUTH');
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data = await res.json();
@@ -633,9 +639,12 @@ async function callClaude(messages, {tools=null, system=null, maxTokens=1000} = 
     headers['anthropic-version'] = '2023-06-01';
     headers['anthropic-dangerous-direct-browser-access'] = 'true';
   }
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method:'POST', headers, body: JSON.stringify(body)
-  });
+  let res;
+  try{
+    res = await fetchT('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers, body: JSON.stringify(body)
+    });
+  }catch(e){ throw new Error(e && e.name === 'AbortError' ? 'TIMEOUT' : 'CORS'); }
   if(res.status === 401) throw new Error('AUTH');
   if(!res.ok) throw new Error('HTTP '+res.status);
   const data = await res.json();
@@ -709,7 +718,7 @@ async function send(text, {spoken=false} = {}){
     if(provider() !== 'nvidia') opts.tools = [{type:'web_search_20250305', name:'web_search'}];
     try{ raw = await callClaude(history, opts); }
     catch(e1){
-      if(e1.message === 'AUTH' || e1.message === 'CORS') throw e1;   // retrying won't help these
+      if(e1.message === 'AUTH' || e1.message === 'CORS' || e1.message === 'TIMEOUT') throw e1;   // retrying won't help these
       await new Promise(r=>setTimeout(r,900)); raw = await callClaude(history, opts);
     }
     const {text: reply, actions} = extractActions(raw);
@@ -723,8 +732,10 @@ async function send(text, {spoken=false} = {}){
     setCore('err');
     const msg = (e && e.message === 'AUTH')
       ? 'The mainframe rejected the API key. Check it in settings — Anthropic keys start with "sk-ant-", NVIDIA keys with "nvapi-".'
+      : (e && e.message === 'TIMEOUT')
+      ? 'The mainframe took too long to respond (60s) and I cut the line. This is usually a slow model spin-up or weak signal — try once more.'
       : (e && e.message === 'CORS')
-      ? 'NVIDIA blocks direct connections from phone browsers. One-time fix: set up the free relay (worker.js + README in your app folder, ~2 minutes) and paste its URL in **settings → NVIDIA relay URL**.'
+      ? 'I couldn\'t reach the relay. Check your signal and try again — and run **settings → link diagnostic** to see exactly which step fails.'
       : 'Connection to the mainframe failed — check your network and try again.';
     pushMsg({role:'assistant', alert:true, content: msg});
     setTimeout(()=> setCore('idle'), 2200);
@@ -1043,13 +1054,11 @@ $('#linkTest').addEventListener('click', async function(){
              : bad('Key format unrecognized — must start with nvapi- or sk-ant-'));
     show();
     if(provider() === 'nvidia'){
-      const relay = state.profile.relay;
-      if(!relay){
-        lines.push(bad('No relay URL set. NVIDIA usually blocks direct phone connections — deploy worker.js on Cloudflare (README step) and paste its URL above.'));
-        show();
-      }else{
+      const relay = (state.profile.relay || '').trim() || DEFAULT_RELAY;
+      lines.push(good((state.profile.relay ? 'Custom relay: ' : 'Built-in relay: ') + relay));
+      {
         try{
-          const h = await fetch(relay, {method:'GET'});
+          const h = await fetchT(relay, {method:'GET'}, 12000);
           const j = await h.json().catch(()=> ({}));
           lines.push(j['jarvis-relay'] === 'online' ? good('Relay online: ' + relay)
                     : bad('That URL responds but is not the JARVIS relay (HTTP ' + h.status + '). Re-paste worker.js in the Cloudflare editor and Deploy.'));
@@ -1064,7 +1073,8 @@ $('#linkTest').addEventListener('click', async function(){
       const r = await callClaude([{role:'user', content:'Reply with exactly one word: ONLINE'}], {maxTokens:12});
       lines.push(good('AI replied: "' + esc(r.slice(0,30)) + '" — LINK FULLY OPERATIONAL'));
     }catch(e){
-      if(e.message === 'CORS') lines.push(bad('Connection blocked by the browser (CORS). This is the direct-NVIDIA block — the relay above fixes it.'));
+      if(e.message === 'TIMEOUT') lines.push(bad('No answer within 60s. Usually a model spin-up or slow network — run the diagnostic again; if it repeats, try model "meta/llama-3.1-8b-instruct" (faster) in the model field.'));
+      else if(e.message === 'CORS') lines.push(bad('Could not reach the relay at all — likely no signal, or the relay URL above is mistyped.'));
       else if(e.message === 'AUTH') lines.push(bad('Key rejected (401). The key is wrong, expired, or was regenerated — create a fresh one at build.nvidia.com and paste it above.'));
       else if(/404/.test(e.message||'')) lines.push(bad('Model not found (404). Clear the NVIDIA model field to use the default.'));
       else if(/429/.test(e.message||'')) lines.push(bad('Rate limited (429). Wait a minute and try again.'));
