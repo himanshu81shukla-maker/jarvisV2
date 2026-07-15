@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>JARVIS</title>
+<meta name="theme-color" content="#04090e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#04090e;
+    --panel:#0a141d;
+    --panel-2:#0d1a26;
+    --line:rgba(84,205,235,.16);
+    --line-strong:rgba(84,205,235,.34);
+    --ink:#ddf0f9;
+    --muted:#8fb2c4;
+    --dim:#5d7d90;
+    --cyan:#3fd6f5;
+    --cyan-deep:#1090b8;
+    --cyan-tint:rgba(63,214,245,.10);
+    --gold:#f2b643;
+    --gold-tint:rgba(242,182,67,.12);
+    --red:#ff6161;
+    --red-tint:rgba(255,97,97,.12);
+    --green:#5ce6a4;
+    --font-ui:'Chakra Petch',system-ui,sans-serif;
+    --font-data:'IBM Plex Mono',ui-monospace,monospace;
+    --z-sheet-backdrop:40; --z-sheet:50; --z-toast:60; --z-boot:100;
+    --sab:env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    height:100dvh;
+    background:var(--bg); color:var(--ink);
+    font:400 15px/1.55 var(--font-ui);
+    overflow:hidden; position:fixed; inset:0; width:100%;
+  }
+  /* ambient hud atmosphere */
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(120% 70% at 50% -10%, rgba(24,120,160,.18), transparent 60%),
+      radial-gradient(90% 50% at 50% 115%, rgba(16,80,110,.14), transparent 60%);
+  }
+  body::after{ /* faint scanlines */
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.05;
+    background:repeating-linear-gradient(0deg, transparent 0 3px, rgba(140,220,245,.5) 3px 4px);
+  }
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  input,textarea,select{font:inherit;color:var(--ink)}
+  :focus-visible{outline:2px solid var(--cyan);outline-offset:2px;border-radius:4px}
+  ::placeholder{color:#6f93a6}
+
+  #app{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;max-width:520px;margin:0 auto}
+
+  /* ---------- header ---------- */
+  header{
+    display:flex;align-items:center;gap:12px;
+    padding:14px 16px 10px;
+    border-bottom:1px solid var(--line);
+  }
+  .wordmark{display:flex;flex-direction:column;line-height:1.1}
+  .wordmark b{font-weight:700;font-size:17px;letter-spacing:.24em;color:var(--cyan)}
+  .wordmark span{font:500 8.5px/1.5 var(--font-data);letter-spacing:.16em;color:var(--dim);text-transform:uppercase;white-space:nowrap}
+  .hud-clock{margin-left:12px;text-align:right}
+  .hud-clock time{display:block;font:500 19px/1.1 var(--font-data);color:var(--ink);letter-spacing:.08em;white-space:nowrap}
+  .hud-clock small{font:400 9.5px/1.5 var(--font-data);color:var(--muted);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap}
+  .pips{display:flex;gap:9px;margin-left:auto;align-items:center}
+  .pip{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:24px}
+  .pip i{width:7px;height:7px;border-radius:50%;background:var(--dim);transition:background .2s, box-shadow .2s}
+  .pip i.on{background:var(--cyan);box-shadow:0 0 8px rgba(63,214,245,.8)}
+  .pip i.warn{background:var(--gold);box-shadow:0 0 8px rgba(242,182,67,.8)}
+  .pip i.err{background:var(--red);box-shadow:0 0 8px rgba(255,97,97,.8)}
+  .pip small{font:400 8px/1 var(--font-data);letter-spacing:.12em;color:var(--dim)}
+  #settingsBtn{padding:10px;margin:-6px -6px -6px 2px;color:var(--muted);border-radius:8px}
+  #settingsBtn:active{color:var(--cyan)}
+
+  /* ---------- views ---------- */
+  main{flex:1;min-height:0;position:relative}
+  .view{position:absolute;inset:0;display:none;flex-direction:column;min-height:0}
+  .view.active{display:flex}
+
+  /* ---------- reactor core ---------- */
+  .core-stage{display:flex;flex-direction:column;align-items:center;padding:18px 16px 6px;transition:padding .3s ease}
+  .core-stage.compact{padding:8px 16px 2px}
+  #coreBtn{position:relative;width:148px;height:148px;border-radius:50%;transition:width .35s cubic-bezier(.22,1,.36,1),height .35s cubic-bezier(.22,1,.36,1)}
+  .core-stage.compact #coreBtn{width:84px;height:84px}
+  #coreBtn svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .ring{fill:none;stroke:var(--cyan);transform-origin:50% 50%}
+  .ring.r1{opacity:.85;stroke-width:1.5;animation:spin 14s linear infinite}
+  .ring.r2{opacity:.5;stroke-width:1;animation:spin 22s linear infinite reverse}
+  .ring.r3{opacity:.3;stroke-width:.75;animation:spin 34s linear infinite}
+  .core-glow{fill:url(#coreGrad)}
+  .core-heart{fill:#bdeffb;filter:drop-shadow(0 0 10px rgba(63,214,245,.9))}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #coreBtn .halo{position:absolute;inset:-14px;border-radius:50%;border:1px solid rgba(63,214,245,.25);opacity:0;transform:scale(.9)}
+  /* state: idle breathing */
+  #coreBtn.idle .core-heart{animation:breathe 3.4s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:.85}50%{opacity:1}}
+  /* state: listening */
+  #coreBtn.listening .ring{stroke:var(--cyan)}
+  #coreBtn.listening .halo{animation:haloPulse 1.5s ease-out infinite}
+  @keyframes haloPulse{0%{opacity:.8;transform:scale(.92)}100%{opacity:0;transform:scale(1.25)}}
+  /* state: thinking */
+  #coreBtn.thinking .ring.r1{animation-duration:2.2s}
+  #coreBtn.thinking .ring.r2{animation-duration:3s}
+  #coreBtn.thinking .ring.r3{animation-duration:4s}
+  /* state: speaking — gold */
+  #coreBtn.speaking .ring{stroke:var(--gold)}
+  #coreBtn.speaking .core-heart{fill:#ffe9bd;filter:drop-shadow(0 0 12px rgba(242,182,67,.95));animation:breathe 1.1s ease-in-out infinite}
+  /* state: error */
+  #coreBtn.err .ring{stroke:var(--red)}
+  .core-status{margin-top:10px;font:500 10px/1.4 var(--font-data);letter-spacing:.26em;text-transform:uppercase;color:var(--muted);min-height:15px;text-align:center}
+  .core-status.gold{color:var(--gold)} .core-status.cyan{color:var(--cyan)} .core-status.red{color:var(--red)}
+
+  /* ---------- chat stream ---------- */
+  #chatScroll{flex:1;min-height:0;overflow-y:auto;padding:10px 16px 14px;scroll-behavior:smooth;overscroll-behavior:contain}
+  .msg{max-width:88%;margin:0 0 14px;position:relative}
+  .msg .who{font:500 8.5px/1 var(--font-data);letter-spacing:.22em;text-transform:uppercase;margin-bottom:5px;display:flex;gap:8px;align-items:baseline}
+  .msg .who .t{color:var(--dim);letter-spacing:.08em}
+  .msg .body{font-size:14.5px}
+  .msg .body p{margin:0 0 8px} .msg .body p:last-child{margin:0}
+  .msg .body code{font:500 12.5px var(--font-data);background:var(--cyan-tint);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  .msg .body pre{background:#071019;border:1px solid var(--line);border-radius:8px;padding:10px;overflow-x:auto;margin:8px 0}
+  .msg .body pre code{background:none;border:0;padding:0;font-size:12px;display:block;white-space:pre}
+  .msg .body ul{margin:4px 0 8px 18px}
+  .msg .body strong{color:#fff}
+  .msg.user{margin-left:auto}
+  .msg.user .who{justify-content:flex-end;color:var(--gold)}
+  .msg.user .body{background:var(--panel-2);border:1px solid rgba(242,182,67,.22);border-radius:12px 12px 3px 12px;padding:10px 13px;color:var(--ink)}
+  .msg.jarvis .who{color:var(--cyan)}
+  .msg.jarvis .body{background:var(--panel);border:1px solid var(--line);border-radius:12px 12px 12px 3px;padding:10px 13px}
+  .msg.jarvis.alert .body{border-color:rgba(255,97,97,.4);background:var(--red-tint)}
+  .msg.jarvis.alert .who{color:var(--red)}
+  .action-chip{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font:500 10px/1 var(--font-data);letter-spacing:.12em;text-transform:uppercase;color:var(--green);border:1px solid rgba(92,230,164,.35);border-radius:20px;padding:5px 10px;background:rgba(92,230,164,.08)}
+  .thinking-row{display:flex;gap:5px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px 12px 12px 3px;width:max-content}
+  .thinking-row i{width:5px;height:5px;border-radius:50%;background:var(--cyan);animation:tdot 1.2s ease-in-out infinite}
+  .thinking-row i:nth-child(2){animation-delay:.15s}.thinking-row i:nth-child(3){animation-delay:.3s}
+  @keyframes tdot{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+  .interim{font:400 12px var(--font-data);color:var(--cyan);opacity:.85;padding:0 16px 6px;min-height:0;letter-spacing:.02em}
+
+  /* ---------- composer ---------- */
+  .composer{display:flex;gap:8px;align-items:flex-end;padding:10px 14px;border-top:1px solid var(--line);background:rgba(6,13,19,.85);backdrop-filter:blur(8px)}
+  .composer textarea{
+    flex:1;resize:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:11px 13px;max-height:110px;min-height:44px;line-height:1.4;font-size:15px;
+  }
+  .composer textarea:focus{border-color:var(--line-strong);outline:none}
+  .cbtn{width:44px;height:44px;flex:0 0 44px;border-radius:12px;display:grid;place-items:center;border:1px solid var(--line);background:var(--panel);color:var(--cyan);transition:background .15s,border-color .15s}
+  .cbtn:active{background:var(--cyan-tint)}
+  .cbtn.rec{border-color:var(--red);color:var(--red);background:var(--red-tint)}
+  .cbtn.send{border-color:var(--line-strong);background:var(--cyan-tint)}
+  .cbtn:disabled{opacity:.35}
+  .cbtn svg{width:20px;height:20px}
+
+  /* ---------- generic panel views ---------- */
+  .panel-head{padding:16px 16px 4px}
+  .panel-head h2{font:600 13px/1.3 var(--font-ui);letter-spacing:.3em;text-transform:uppercase;color:var(--cyan)}
+  .panel-head p{font:400 11px/1.5 var(--font-data);color:var(--muted);margin-top:3px;letter-spacing:.04em}
+  .scroll{flex:1;min-height:0;overflow-y:auto;padding:12px 16px calc(16px + var(--sab));overscroll-behavior:contain}
+
+  /* empty states */
+  .empty{border:1px dashed var(--line-strong);border-radius:14px;padding:26px 18px;text-align:center;margin-top:8px}
+  .empty svg{width:30px;height:30px;color:var(--cyan);opacity:.7;margin-bottom:10px}
+  .empty h3{font:600 12px/1.4 var(--font-ui);letter-spacing:.18em;text-transform:uppercase;color:var(--ink)}
+  .empty p{font-size:12.5px;color:var(--muted);margin-top:5px;max-width:30ch;margin-inline:auto}
+
+  /* ---------- tasks ---------- */
+  .add-row{display:flex;gap:8px;margin-bottom:6px}
+  .add-row input[type=text]{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px;min-height:44px}
+  .add-row input[type=text]:focus{border-color:var(--line-strong);outline:none}
+  .add-row .cbtn{border-radius:10px}
+  .due-row{display:flex;align-items:center;gap:8px;margin:0 0 14px}
+  .due-row label{font:400 10px var(--font-data);letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
+  .due-row input{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:400 12px var(--font-data);color:var(--muted);color-scheme:dark}
+  .task{display:flex;align-items:flex-start;gap:12px;padding:13px 4px;border-bottom:1px solid var(--line)}
+  .task:last-child{border-bottom:0}
+  .tcheck{width:22px;height:22px;flex:0 0 22px;margin-top:1px;border:1.5px solid var(--line-strong);border-radius:7px;display:grid;place-items:center;color:transparent;transition:all .18s}
+  .task.done .tcheck{background:var(--cyan-tint);border-color:var(--cyan);color:var(--cyan)}
+  .tcheck svg{width:13px;height:13px}
+  .tbody{flex:1;min-width:0}
+  .tbody .title{font-size:14.5px;word-break:break-word}
+  .task.done .title{color:var(--dim);text-decoration:line-through;text-decoration-color:rgba(63,214,245,.5)}
+  .tmeta{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap}
+  .chip{font:500 9.5px/1 var(--font-data);letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--line);color:var(--muted);border-radius:20px;padding:4px 9px}
+  .chip.due{border-color:rgba(242,182,67,.4);color:var(--gold)}
+  .chip.late{border-color:rgba(255,97,97,.5);color:var(--red)}
+  .chip.ai{border-color:rgba(63,214,245,.35);color:var(--cyan)}
+  .tdel{padding:8px;margin:-4px -4px 0 0;color:var(--dim);border-radius:8px}
+  .tdel:active{color:var(--red)}
+  .tdel svg{width:16px;height:16px}
+  .section-label{font:500 9.5px/1 var(--font-data);letter-spacing:.24em;text-transform:uppercase;color:var(--dim);margin:18px 0 4px;display:flex;align-items:center;gap:10px}
+  .section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  /* ---------- briefing ---------- */
+  .brief-run{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:48px;border:1px solid var(--line-strong);border-radius:12px;background:var(--cyan-tint);color:var(--cyan);font:600 12px/1 var(--font-ui);letter-spacing:.2em;text-transform:uppercase;margin-bottom:14px}
+  .brief-run:disabled{opacity:.45}
+  .brief-run svg{width:17px;height:17px}
+  .brief-doc{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:16px 15px}
+  .brief-doc .stamp{font:500 9.5px/1.4 var(--font-data);letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:10px;display:block}
+  .brief-doc .body{font-size:14.5px}
+  .brief-doc .body p{margin:0 0 9px}
+  .brief-doc .body strong{color:#fff}
+  .brief-doc .body ul{margin:4px 0 9px 18px}
+  .brief-note{font:400 10.5px/1.6 var(--font-data);color:var(--dim);margin-top:12px;letter-spacing:.03em}
+
+  /* ---------- memory ---------- */
+  .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px}
+  .pcell{border:1px solid var(--line);border-radius:12px;padding:11px 12px;background:var(--panel)}
+  .pcell small{display:block;font:500 8.5px/1 var(--font-data);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-bottom:5px}
+  .pcell b{font:500 14px var(--font-ui);color:var(--ink);word-break:break-word}
+  .pcell b.unset{color:var(--dim);font-style:italic;font-weight:400}
+  .note{border-bottom:1px solid var(--line);padding:12px 4px;display:flex;gap:12px;align-items:flex-start}
+  .note:last-child{border-bottom:0}
+  .note .nbody{flex:1;min-width:0;font-size:14px;word-break:break-word}
+  .note .nmeta{margin-top:5px;display:flex;gap:8px}
+
+  /* ---------- bottom nav ---------- */
+  nav{display:flex;border-top:1px solid var(--line);background:rgba(6,13,19,.92);backdrop-filter:blur(8px);padding-bottom:var(--sab)}
+  nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px 8px;color:var(--dim);position:relative;min-height:56px}
+  nav button svg{width:21px;height:21px}
+  nav button span{font:500 8.5px/1 var(--font-data);letter-spacing:.16em;text-transform:uppercase}
+  nav button.active{color:var(--cyan)}
+  nav button.active::before{content:"";position:absolute;top:-1px;left:25%;right:25%;height:2px;background:var(--cyan);box-shadow:0 0 8px rgba(63,214,245,.9)}
+  nav button .badge{position:absolute;top:6px;right:calc(50% - 18px);min-width:15px;height:15px;border-radius:8px;background:var(--gold);color:#1a1200;font:600 9px/15px var(--font-data);text-align:center;padding:0 3px}
+
+  /* ---------- settings sheet ---------- */
+  dialog#settings{
+    border:0;padding:0;background:transparent;max-width:520px;width:100%;
+    position:fixed;inset:auto 0 0 0;margin:0 auto;z-index:var(--z-sheet);
+  }
+  dialog#settings::backdrop{background:rgba(2,6,10,.7);backdrop-filter:blur(2px)}
+  .sheet{background:var(--panel-2);border:1px solid var(--line-strong);border-bottom:0;border-radius:18px 18px 0 0;padding:18px 18px calc(20px + var(--sab));max-height:86vh;overflow-y:auto;overscroll-behavior:contain}
+  .sheet h2{font:600 12px/1.2 var(--font-ui);letter-spacing:.3em;text-transform:uppercase;color:var(--cyan);margin-bottom:16px;display:flex;align-items:center}
+  .sheet h2 button{margin-left:auto;color:var(--muted);padding:8px;margin-top:-8px;margin-right:-8px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font:500 9.5px/1 var(--font-data);letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+  .field input[type=text],.field input[type=password],.field select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px;min-height:44px;color:var(--ink)}
+  .field input:focus,.field select:focus{border-color:var(--line-strong);outline:none}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid var(--line)}
+  .toggle-row span{font-size:14px}
+  .switch{width:46px;height:26px;border-radius:14px;border:1px solid var(--line-strong);background:var(--bg);position:relative;transition:background .2s;flex:0 0 46px}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--dim);transition:transform .2s,background .2s}
+  .switch[aria-checked="true"]{background:var(--cyan-tint)}
+  .switch[aria-checked="true"]::after{transform:translateX(20px);background:var(--cyan)}
+  .danger-btn{width:100%;min-height:46px;border:1px solid rgba(255,97,97,.4);border-radius:12px;color:var(--red);font:600 11px/1 var(--font-ui);letter-spacing:.2em;text-transform:uppercase;margin-top:14px}
+  .save-btn{width:100%;min-height:48px;border:1px solid var(--line-strong);background:var(--cyan-tint);border-radius:12px;color:var(--cyan);font:600 12px/1 var(--font-ui);letter-spacing:.24em;text-transform:uppercase;margin-top:6px}
+
+  /* ---------- toast ---------- */
+  #toast{position:fixed;left:50%;bottom:calc(84px + var(--sab));transform:translate(-50%,10px);z-index:var(--z-toast);
+    background:var(--panel-2);border:1px solid var(--line-strong);border-radius:12px;padding:10px 16px;
+    font:500 11px/1.4 var(--font-data);letter-spacing:.08em;color:var(--ink);opacity:0;pointer-events:none;
+    transition:opacity .25s,transform .25s;max-width:88%;text-align:center}
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+  #toast.gold{border-color:rgba(242,182,67,.5);color:var(--gold)}
+  #toast.red{border-color:rgba(255,97,97,.5);color:var(--red)}
+  #diagOut{font:400 10.5px/1.8 var(--font-data);color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px;white-space:pre-wrap;word-break:break-word}
+  #diagOut .good{color:var(--green)} #diagOut .bad{color:var(--red)}
+
+  /* ---------- boot ---------- */
+  #boot{position:fixed;inset:0;z-index:var(--z-boot);background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;transition:opacity .5s ease}
+  #boot.done{opacity:0;pointer-events:none}
+  #boot .boot-core{width:120px;height:120px;position:relative}
+  #boot .boot-core svg{width:100%;height:100%;overflow:visible}
+  #bootLog{font:400 10.5px/1.9 var(--font-data);letter-spacing:.1em;color:var(--muted);width:min(320px,80vw);height:126px;overflow:hidden}
+  #bootLog .ok{color:var(--cyan)}
+  #bootLog .sys{color:var(--dim)}
+  #boot .skip{font:500 9px/1 var(--font-data);letter-spacing:.3em;color:var(--dim);text-transform:uppercase;padding:12px}
+
+  /* scrollbars */
+  ::-webkit-scrollbar{width:3px;height:3px}
+  ::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:2px}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+    #chatScroll{scroll-behavior:auto}
+  }
+</style>
+</head>
+<body>
+
+<!-- BOOT -->
+<div id="boot" role="status" aria-label="System booting">
+  <div class="boot-core">
+    <svg viewBox="0 0 100 100" aria-hidden="true">
+      <circle class="ring r1" cx="50" cy="50" r="44" stroke-dasharray="10 6"/>
+      <circle class="ring r2" cx="50" cy="50" r="35" stroke-dasharray="3 5"/>
+      <circle cx="50" cy="50" r="22" fill="rgba(63,214,245,.08)" stroke="rgba(63,214,245,.4)" stroke-width="1"/>
+      <circle cx="50" cy="50" r="9" class="core-heart"/>
+    </svg>
+  </div>
+  <div id="bootLog" aria-hidden="true"></div>
+  <button class="skip" id="skipBoot">Tap to skip</button>
+</div>
+
+<div id="app">
+  <header>
+    <div class="wordmark"><b>JARVIS</b><span>Personal AI · Online</span></div>
+    <div class="pips" aria-hidden="true">
+      <div class="pip"><i id="pipNet"></i><small>NET</small></div>
+      <div class="pip"><i id="pipVoice"></i><small>VOX</small></div>
+      <div class="pip"><i id="pipPwr"></i><small id="pwrLbl">PWR</small></div>
+    </div>
+    <div class="hud-clock"><time id="clock">--:--</time><small id="dateLine">—</small></div>
+    <button id="settingsBtn" aria-label="Open settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <!-- ASSISTANT -->
+    <section class="view active" id="view-chat">
+      <div class="core-stage" id="coreStage">
+        <button id="coreBtn" class="idle" aria-label="Hold a voice conversation. Tap to speak.">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <defs>
+              <radialGradient id="coreGrad">
+                <stop offset="0%" stop-color="rgba(120,230,255,.55)"/>
+                <stop offset="60%" stop-color="rgba(63,214,245,.14)"/>
+                <stop offset="100%" stop-color="rgba(63,214,245,0)"/>
+              </radialGradient>
+            </defs>
+            <circle class="ring r1" cx="50" cy="50" r="46" stroke-dasharray="14 8"/>
+            <circle class="ring r2" cx="50" cy="50" r="38" stroke-dasharray="2 5"/>
+            <circle class="ring r3" cx="50" cy="50" r="30" stroke-dasharray="24 10"/>
+            <circle class="core-glow" cx="50" cy="50" r="26"/>
+            <circle cx="50" cy="50" r="18" fill="rgba(63,214,245,.07)" stroke="rgba(63,214,245,.45)" stroke-width=".8"/>
+            <circle cx="50" cy="50" r="8" class="core-heart"/>
+          </svg>
+          <span class="halo" aria-hidden="true"></span>
+        </button>
+        <div class="core-status" id="coreStatus">STANDING BY</div>
+      </div>
+      <div id="chatScroll" aria-live="polite"></div>
+      <div class="interim" id="interim"></div>
+      <div class="composer">
+        <button class="cbtn" id="micBtn" aria-label="Speak to JARVIS">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+        </button>
+        <textarea id="input" rows="1" placeholder="Speak or type a directive…" aria-label="Message JARVIS"></textarea>
+        <button class="cbtn send" id="sendBtn" aria-label="Send message">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- TASKS -->
+    <section class="view" id="view-tasks">
+      <div class="panel-head"><h2>Protocols</h2><p>Tasks &amp; reminders · JARVIS announces items when they come due</p></div>
+      <div class="scroll">
+        <div class="add-row">
+          <input type="text" id="taskInput" placeholder="New protocol…" aria-label="New task title">
+          <button class="cbtn" id="taskAdd" aria-label="Add task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        </div>
+        <div class="due-row">
+          <label for="taskDue">Due</label>
+          <input type="datetime-local" id="taskDue" aria-label="Optional due date and time">
+        </div>
+        <div id="taskList"></div>
+      </div>
+    </section>
+
+    <!-- BRIEFING -->
+    <section class="view" id="view-brief">
+      <div class="panel-head"><h2>Briefing</h2><p>Live headlines &amp; weather, compiled by JARVIS via web search</p></div>
+      <div class="scroll">
+        <button class="brief-run" id="briefRun">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span id="briefRunLbl">Run briefing</span>
+        </button>
+        <div id="briefOut"></div>
+      </div>
+    </section>
+
+    <!-- MEMORY -->
+    <section class="view" id="view-mem">
+      <div class="panel-head"><h2>Memory Bank</h2><p>What JARVIS knows about you · notes persist across sessions</p></div>
+      <div class="scroll">
+        <div class="profile-grid" id="profileGrid"></div>
+        <div class="section-label">Notes</div>
+        <div class="add-row" style="margin-top:8px">
+          <input type="text" id="noteInput" placeholder="Log a note…" aria-label="New note">
+          <button class="cbtn" id="noteAdd" aria-label="Add note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        </div>
+        <div id="noteList"></div>
+      </div>
+    </section>
+  </main>
+
+  <nav aria-label="Sections">
+    <button data-view="chat" class="active" aria-label="Assistant">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><line x1="12" y1="3" x2="12" y2="6.5"/><line x1="12" y1="17.5" x2="12" y2="21"/></svg><span>Assist</span>
+    </button>
+    <button data-view="tasks" aria-label="Tasks" style="position:relative">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Tasks</span><i class="badge" id="taskBadge" hidden></i>
+    </button>
+    <button data-view="brief" aria-label="Briefing">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0V9"/><line x1="12" y1="7" x2="17" y2="7"/><line x1="12" y1="11" x2="17" y2="11"/><line x1="12" y1="15" x2="17" y2="15"/></svg><span>Brief</span>
+    </button>
+    <button data-view="mem" aria-label="Memory">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 0-5 5c0 1.1.36 2.1.97 2.92A5 5 0 0 0 7 21h10a5 5 0 0 0-.97-11.08A4.98 4.98 0 0 0 17 7a5 5 0 0 0-5-5z"/><line x1="12" y1="12" x2="12" y2="16"/></svg><span>Memory</span>
+    </button>
+  </nav>
+</div>
+
+<!-- SETTINGS -->
+<dialog id="settings">
+  <div class="sheet">
+    <h2>Calibration
+      <button id="settingsClose" aria-label="Close settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </h2>
+    <div class="field"><label for="setName">How JARVIS addresses you</label><input type="text" id="setName" placeholder="e.g. sir, boss, Priya…"></div>
+    <div class="field"><label for="setCity">Your city (for briefings)</label><input type="text" id="setCity" placeholder="e.g. Varanasi"></div>
+    <div class="field" id="keyField" hidden><label for="setKey">API key — Anthropic or NVIDIA (stays on this device)</label><input type="password" id="setKey" placeholder="sk-ant-… or nvapi-…" autocomplete="off"></div>
+    <div class="field" id="relayField" hidden><label for="setRelay">NVIDIA relay URL (fixes "network error" — see README)</label><input type="text" id="setRelay" placeholder="https://jarvis-relay.YOUR-NAME.workers.dev" autocomplete="off"></div>
+    <div class="field" id="modelField" hidden><label for="setModel">NVIDIA model (blank = Llama 3.3 70B)</label><input type="text" id="setModel" placeholder="meta/llama-3.3-70b-instruct" autocomplete="off"></div>
+    <div class="field"><label for="setVoice">Voice</label><div style="display:flex;gap:8px"><select id="setVoice" style="flex:1;min-width:0"><option value="">Auto (recommended)</option></select><button class="cbtn" id="voiceTest" aria-label="Preview selected voice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button></div></div>
+    <div class="toggle-row"><span>Spoken replies</span><button class="switch" id="setSpeak" role="switch" aria-checked="true" aria-label="Toggle spoken replies"></button></div>
+    <button class="save-btn" id="linkTest" style="background:transparent" hidden>Run link diagnostic</button>
+    <div id="diagOut" hidden></div>
+    <button class="save-btn" id="settingsSave">Apply</button>
+    <button class="danger-btn" id="wipeBtn">Wipe all data</button>
+  </div>
+</dialog>
+
+<div id="toast" role="status"></div>
+
+<script>
+/* =============================================================
+   JARVIS — application logic
+   ============================================================= */
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------------- state & persistence ---------------- */
+const KEY = 'jarvis_state_v1';
+const CLAUDE_ENV = typeof window.storage !== 'undefined';   // running inside claude.ai
+const STANDALONE = !CLAUDE_ENV;                              // installed app / hosted PWA
+let storageOK = true;
+let state = {
+  profile: { name:'', city:'', speak:true, voiceURI:'', apiKey:'', model:'', relay:'' },
+  tasks: [],            // {id,title,due,done,notified,byAI,created}
+  notes: [],            // {id,text,byAI,created}
+  chat:  [],            // {role:'user'|'assistant', content, alert?}
+  lastBrief: null,      // {text, when}
+  booted:false
+};
+let saveTimer = null;
+function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveState, 400); }
+async function saveState(){
+  const slim = JSON.stringify({...state, chat: state.chat.slice(-40)});
+  try{
+    if(CLAUDE_ENV) await window.storage.set(KEY, slim);
+    else localStorage.setItem(KEY, slim);
+  }catch(e){ storageOK = false; }
+}
+async function loadState(){
+  try{
+    let raw = null;
+    if(CLAUDE_ENV){ const res = await window.storage.get(KEY); raw = res && res.value; }
+    else raw = localStorage.getItem(KEY);
+    if(raw){
+      const saved = JSON.parse(raw);
+      state = {...state, ...saved, profile:{...state.profile, ...(saved.profile||{})}};
+    }
+  }catch(e){ /* first run: nothing saved yet */ }
+}
+
+/* ---------------- toast ---------------- */
+let toastT;
+function toast(msg, tone=''){
+  const t = $('#toast');
+  t.textContent = msg; t.className = 'show ' + tone;
+  clearTimeout(toastT); toastT = setTimeout(()=> t.className='', 2600);
+}
+
+/* ---------------- clock / date / battery / net ---------------- */
+function tickClock(){
+  const n = new Date();
+  $('#clock').textContent = n.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12:false});
+  $('#dateLine').textContent = n.toLocaleDateString([], {weekday:'short', day:'2-digit', month:'short'}).replace(/,/g,'').toUpperCase();
+}
+tickClock(); setInterval(tickClock, 10_000);
+
+function pipNet(){ $('#pipNet').className = navigator.onLine ? 'on' : 'err'; }
+addEventListener('online', pipNet); addEventListener('offline', pipNet); pipNet();
+
+if(navigator.getBattery){
+  navigator.getBattery().then(b => {
+    const upd = () => {
+      const pct = Math.round(b.level*100);
+      $('#pwrLbl').textContent = pct + '%';
+      $('#pipPwr').className = b.charging ? 'on' : (pct <= 20 ? 'err' : pct <= 45 ? 'warn' : 'on');
+    };
+    b.addEventListener('levelchange', upd); b.addEventListener('chargingchange', upd); upd();
+  }).catch(()=>{ $('#pipPwr').className='on'; });
+}else{ $('#pipPwr').className = 'on'; }
+
+/* ---------------- navigation ---------------- */
+$$('nav button').forEach(btn => btn.addEventListener('click', () => {
+  $$('nav button').forEach(b => b.classList.toggle('active', b===btn));
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-'+btn.dataset.view));
+  if(btn.dataset.view === 'chat') scrollChat(true);
+}));
+
+/* ---------------- markdown-lite ---------------- */
+function md(text){
+  let t = esc(text.trim());
+  t = t.replace(/```([\s\S]*?)```/g, (_,c)=>'<pre><code>'+c.replace(/^\w+\n/,'')+'</code></pre>');
+  t = t.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+  t = t.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  t = t.replace(/(^|\n)[-•] (.+)/g,'$1<li>$2</li>');
+  t = t.replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g,'<ul>$1</ul>');
+  return t.split(/\n{2,}/).map(p => /^<(ul|pre)/.test(p.trim()) ? p : '<p>'+p.replace(/\n/g,'<br>')+'</p>').join('');
+}
+
+/* ---------------- chat rendering ---------------- */
+const chatScroll = $('#chatScroll');
+function timeStamp(){ return new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
+function renderMsg(m){
+  const div = document.createElement('div');
+  div.className = 'msg ' + (m.role === 'user' ? 'user' : 'jarvis') + (m.alert ? ' alert' : '');
+  const who = m.role === 'user' ? (state.profile.name || 'You') : 'JARVIS';
+  div.innerHTML = `<div class="who"><span>${esc(who)}</span><span class="t">${m.t || ''}</span></div><div class="body">${md(m.content)}</div>`;
+  if(m.actions && m.actions.length){
+    m.actions.forEach(a => {
+      const chip = document.createElement('span');
+      chip.className = 'action-chip';
+      chip.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>${esc(a)}`;
+      div.querySelector('.body').appendChild(chip);
+    });
+  }
+  chatScroll.appendChild(div);
+}
+function renderChat(){
+  chatScroll.innerHTML = '';
+  state.chat.forEach(renderMsg);
+  scrollChat(true);
+  $('#coreStage').classList.toggle('compact', state.chat.length > 0);
+}
+function scrollChat(instant){ chatScroll.scrollTo({top: chatScroll.scrollHeight, behavior: (instant||REDUCED)?'auto':'smooth'}); }
+function pushMsg(m){ m.t = timeStamp(); state.chat.push(m); renderMsg(m); scrollChat(); $('#coreStage').classList.add('compact'); scheduleSave(); }
+
+/* ---------------- reactor core state ---------------- */
+const coreBtn = $('#coreBtn'), coreStatus = $('#coreStatus');
+function setCore(mode){
+  coreBtn.className = mode;
+  const map = {
+    idle:      ['STANDING BY',''],
+    listening: ['LISTENING','cyan'],
+    thinking:  ['PROCESSING','cyan'],
+    speaking:  ['SPEAKING','gold'],
+    err:       ['LINK FAULT','red']
+  };
+  const [label, tone] = map[mode] || map.idle;
+  coreStatus.textContent = label;
+  coreStatus.className = 'core-status ' + tone;
+}
+
+/* =============================================================
+   AI PROVIDERS — the brain (Anthropic or NVIDIA NIM)
+   ============================================================= */
+function provider(){
+  if(!STANDALONE) return 'anthropic-proxy';
+  return (state.profile.apiKey||'').startsWith('nvapi-') ? 'nvidia' : 'anthropic';
+}
+const NVIDIA_DEFAULT_MODEL = 'meta/llama-3.3-70b-instruct';
+function personaPrompt(){
+  const p = state.profile;
+  const now = new Date();
+  const openTasks = state.tasks.filter(t=>!t.done).map(t => `- ${t.title}${t.due ? ' (due '+new Date(t.due).toLocaleString()+')' : ''}`).join('\n') || '(none)';
+  const notes = state.notes.slice(-12).map(n=>'- '+n.text).join('\n') || '(none)';
+  return `You are JARVIS, a highly capable personal AI assistant running on the user's phone. Persona: composed, precise, quietly witty, unfailingly courteous — a brilliant British butler-engineer. Keep replies CONCISE (usually 1-3 short sentences; longer only when genuinely needed) because replies are spoken aloud. No emoji. Plain text or light markdown only.
+
+Address the user as "${p.name || 'sir'}". Current local time: ${now.toLocaleString()}. User's city: ${p.city || 'unknown'}.
+
+The app you run in has Tasks (called "protocols"), Notes (the "memory bank"), and a user profile. You can operate them by appending action tags at the VERY END of your reply, each on its own line, in exactly this format:
+[[ACTION:{"type":"add_task","title":"...","due":"2026-07-11T18:00"}]]  (due is optional, ISO local format)
+[[ACTION:{"type":"complete_task","title":"..."}]]  (title = fuzzy match of an open task)
+[[ACTION:{"type":"add_note","text":"..."}]]
+[[ACTION:{"type":"set_profile","name":"...","city":"..."}]]  (include only fields to change)
+
+${provider()==='nvidia'
+  ? 'You do NOT have live internet access. If asked about breaking news, live scores, or prices, say plainly that your live feed is offline and answer from general knowledge, noting it may be dated.'
+  : 'You also have a web_search tool. Use it whenever the user asks about current events, news, weather, sports, prices, facts that change over time, or anything you are not certain about — search first, then answer briefly in your own words. Do not paste URLs or long quotes.'}
+
+Rules: use actions ONLY when the user asks (e.g. "remind me to…", "note that…", "call me X", "I live in…"). When you use one, confirm it briefly in your reply text. Never mention the tag syntax. If the user shares their name or city conversationally, store it with set_profile.
+
+OPEN PROTOCOLS:\n${openTasks}\n\nMEMORY BANK (user notes):\n${notes}`;
+}
+
+async function callClaude(messages, {tools=null, system=null, maxTokens=1000} = {}){
+  if(provider() === 'nvidia'){
+    /* NVIDIA NIM — OpenAI-compatible chat completions */
+    const nimMessages = system ? [{role:'system', content:system}, ...messages] : messages;
+    let res;
+    try{
+      const endpoint = (state.profile.relay || '').trim() || 'https://integrate.api.nvidia.com/v1/chat/completions';
+      res = await fetch(endpoint, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Accept':'application/json',
+                  'Authorization':'Bearer ' + state.profile.apiKey },
+        body: JSON.stringify({ model: state.profile.model || NVIDIA_DEFAULT_MODEL,
+                               messages: nimMessages, max_tokens: maxTokens, temperature: 0.6 })
+      });
+    }catch(e){ throw new Error('CORS'); }
+    if(res.status === 401 || res.status === 403) throw new Error('AUTH');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    const out = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if(!out) throw new Error('empty');
+    return out.trim();
+  }
+  /* Anthropic (claude.ai proxy, or direct with sk-ant key) */
+  const body = { model:'claude-sonnet-4-6', max_tokens:maxTokens, messages };
+  if(system) body.system = system;
+  if(tools) body.tools = tools;
+  const headers = {'Content-Type':'application/json'};
+  if(STANDALONE){
+    headers['x-api-key'] = state.profile.apiKey;
+    headers['anthropic-version'] = '2023-06-01';
+    headers['anthropic-dangerous-direct-browser-access'] = 'true';
+  }
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST', headers, body: JSON.stringify(body)
+  });
+  if(res.status === 401) throw new Error('AUTH');
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  if(data.error) throw new Error(data.error.message || 'API error');
+  return data.content.filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+}
+
+/* -------- action protocol parsing -------- */
+function extractActions(raw){
+  const actions = [];
+  const text = raw.replace(/\[\[ACTION:({[\s\S]*?})\]\]/g, (_, json) => {
+    try{ actions.push(JSON.parse(json)); }catch(e){}
+    return '';
+  }).trim();
+  return {text, actions};
+}
+function runActions(actions){
+  const done = [];
+  actions.forEach(a => {
+    try{
+      if(a.type === 'add_task' && a.title){
+        state.tasks.unshift({id:Date.now()+Math.random(), title:a.title, due:a.due||'', done:false, notified:false, byAI:true, created:Date.now()});
+        done.push('Protocol added: '+a.title);
+      }else if(a.type === 'complete_task' && a.title){
+        const q = a.title.toLowerCase();
+        const t = state.tasks.find(t=>!t.done && t.title.toLowerCase().includes(q)) || state.tasks.find(t=>!t.done && q.includes(t.title.toLowerCase()));
+        if(t){ t.done = true; done.push('Completed: '+t.title); }
+      }else if(a.type === 'add_note' && a.text){
+        state.notes.unshift({id:Date.now()+Math.random(), text:a.text, byAI:true, created:Date.now()});
+        done.push('Noted to memory bank');
+      }else if(a.type === 'set_profile'){
+        if(a.name){ state.profile.name = a.name; done.push('Designation set: '+a.name); }
+        if(a.city){ state.profile.city = a.city; done.push('Location set: '+a.city); }
+      }
+    }catch(e){}
+  });
+  if(done.length){ renderTasks(); renderNotes(); renderProfile(); scheduleSave(); }
+  return done;
+}
+
+/* -------- send flow -------- */
+let busy = false;
+async function send(text, {spoken=false} = {}){
+  text = (text||'').trim();
+  if(!text || busy) return;
+  if(STANDALONE && !state.profile.apiKey){
+    pushMsg({role:'user', content:text}); $('#input').value=''; autosize();
+    pushMsg({role:'assistant', alert:true, content:'My neural link isn\'t connected yet. Open **settings (gear icon) → API key** and paste your Anthropic API key — then I\'m fully at your service.'});
+    return;
+  }
+  busy = true;
+  $('#sendBtn').disabled = true;
+  pushMsg({role:'user', content:text});
+  $('#input').value = ''; autosize();
+  setCore('thinking');
+  const think = document.createElement('div');
+  think.className = 'thinking-row'; think.innerHTML = '<i></i><i></i><i></i>';
+  chatScroll.appendChild(think); scrollChat();
+  try{
+    // API requires: first turn user, strictly alternating roles
+    const history = [];
+    state.chat.slice(-16).forEach(m => {
+      const role = m.role === 'user' ? 'user' : 'assistant';
+      if(!history.length && role === 'assistant') return;          // drop leading assistant turns
+      const last = history[history.length-1];
+      if(last && last.role === role) last.content += '\n' + m.content;  // merge consecutive
+      else history.push({role, content: m.content});
+    });
+    let raw;
+    const opts = {system: personaPrompt(), maxTokens:1600};
+    if(provider() !== 'nvidia') opts.tools = [{type:'web_search_20250305', name:'web_search'}];
+    try{ raw = await callClaude(history, opts); }
+    catch(e1){
+      if(e1.message === 'AUTH' || e1.message === 'CORS') throw e1;   // retrying won't help these
+      await new Promise(r=>setTimeout(r,900)); raw = await callClaude(history, opts);
+    }
+    const {text: reply, actions} = extractActions(raw);
+    const executed = runActions(actions);
+    think.remove();
+    const finalText = reply || (executed.length ? 'Done.' : '…');
+    pushMsg({role:'assistant', content: finalText, actions: executed});
+    if(state.profile.speak) speak(finalText); else setCore('idle');
+  }catch(e){
+    think.remove();
+    setCore('err');
+    const msg = (e && e.message === 'AUTH')
+      ? 'The mainframe rejected the API key. Check it in settings — Anthropic keys start with "sk-ant-", NVIDIA keys with "nvapi-".'
+      : (e && e.message === 'CORS')
+      ? 'NVIDIA blocks direct connections from phone browsers. One-time fix: set up the free relay (worker.js + README in your app folder, ~2 minutes) and paste its URL in **settings → NVIDIA relay URL**.'
+      : 'Connection to the mainframe failed — check your network and try again.';
+    pushMsg({role:'assistant', alert:true, content: msg});
+    setTimeout(()=> setCore('idle'), 2200);
+  }
+  busy = false; $('#sendBtn').disabled = false;
+  scheduleSave();
+}
+
+/* =============================================================
+   VOICE — recognition + synthesis
+   ============================================================= */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog = null, listening = false;
+if(SR){
+  recog = new SR();
+  recog.lang = 'en-US'; recog.interimResults = true; recog.continuous = false;
+  recog.onresult = e => {
+    let interim = '', final = '';
+    for(const r of e.results){ (r.isFinal ? final = r[0].transcript : interim += r[0].transcript); }
+    $('#interim').textContent = interim ? '» ' + interim : '';
+    if(final){ $('#interim').textContent=''; stopListening(); send(final, {spoken:true}); }
+  };
+  recog.onend = () => { if(listening) stopListening(true); };
+  recog.onerror = e => {
+    stopListening(true);
+    if(e.error === 'not-allowed') toast('Microphone access denied — enable it in browser settings', 'red');
+    else if(e.error !== 'aborted' && e.error !== 'no-speech') toast('Voice input error: '+e.error, 'red');
+    if(e.error === 'no-speech') toast('I heard nothing, I\'m afraid.', 'gold');
+  };
+  $('#pipVoice').className = 'on';
+}else{
+  $('#pipVoice').className = 'err';
+}
+function startListening(){
+  if(!recog){ toast('Voice input isn\'t supported in this browser — Chrome works best', 'gold'); return; }
+  try{ window.speechSynthesis && speechSynthesis.cancel(); }catch(e){}
+  try{ recog.start(); }catch(e){ return; }
+  listening = true;
+  $('#micBtn').classList.add('rec');
+  setCore('listening');
+}
+function stopListening(silent){
+  listening = false;
+  $('#micBtn').classList.remove('rec');
+  $('#interim').textContent = '';
+  try{ recog && recog.stop(); }catch(e){}
+  if(silent) setCore(busy ? 'thinking' : 'idle');
+}
+$('#micBtn').addEventListener('click', ()=> listening ? stopListening(true) : startListening());
+coreBtn.addEventListener('click', ()=> {
+  if(window.speechSynthesis && speechSynthesis.speaking){ speechSynthesis.cancel(); setCore('idle'); return; }
+  listening ? stopListening(true) : startListening();
+});
+
+/* -------- text to speech -------- */
+let voices = [];
+function loadVoices(){
+  voices = speechSynthesis.getVoices();
+  const sel = $('#setVoice');
+  const cur = state.profile.voiceURI;
+  sel.innerHTML = '<option value="">Auto (recommended)</option>' + voices
+    .filter(v => v.lang.startsWith('en'))
+    .map(v => `<option value="${esc(v.voiceURI)}" ${v.voiceURI===cur?'selected':''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('');
+}
+if('speechSynthesis' in window){
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+function pickVoice(){
+  if(state.profile.voiceURI){
+    const v = voices.find(v=>v.voiceURI === state.profile.voiceURI);
+    if(v) return v;
+  }
+  /* score voices so Android (Google TTS names like "English (United Kingdom)")
+     and desktop both land on a composed British-leaning voice */
+  const score = v => {
+    const n = (v.name + ' ' + v.lang).toLowerCase(); let p = 0;
+    if(/en-gb|united kingdom|british/.test(n)) p += 5;
+    if(/daniel|arthur|george|brian|ryan|oliver/.test(n)) p += 3;
+    if(/\bmale\b/.test(n)) p += 2;
+    if(/google|natural|neural/.test(n)) p += 2;
+    if(/en-in|india/.test(n)) p += 1;
+    if(v.localService) p += 1;
+    if(/female|zira|susan|catherine/.test(n)) p -= 2;
+    return p;
+  };
+  const en = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+  return en.sort((a,b)=>score(b)-score(a))[0] || voices[0] || null;
+}
+function stripForSpeech(t){
+  return t.replace(/```[\s\S]*?```/g,' code omitted. ').replace(/[*_`#>|]/g,'').replace(/\[\[ACTION[\s\S]*?\]\]/g,'').replace(/https?:\/\/\S+/g,' a link ').trim();
+}
+function speak(text){
+  if(!('speechSynthesis' in window) || !state.profile.speak){ setCore('idle'); return; }
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(stripForSpeech(text));
+    const v = pickVoice(); if(v) u.voice = v;
+    u.rate = 1.02; u.pitch = 0.92;
+    u.onstart = ()=> setCore('speaking');
+    u.onend = ()=> setCore('idle');
+    u.onerror = ()=> setCore('idle');
+    speechSynthesis.speak(u);
+  }catch(e){ setCore('idle'); }
+}
+
+/* =============================================================
+   COMPOSER
+   ============================================================= */
+const input = $('#input');
+function autosize(){ input.style.height='auto'; input.style.height = Math.min(input.scrollHeight, 110)+'px'; }
+input.addEventListener('input', autosize);
+input.addEventListener('keydown', e => {
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(input.value); }
+});
+$('#sendBtn').addEventListener('click', ()=> send(input.value));
+
+/* =============================================================
+   TASKS ("protocols")
+   ============================================================= */
+function fmtDue(due){
+  const d = new Date(due); if(isNaN(d)) return '';
+  return d.toLocaleString([], {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+}
+function renderTasks(){
+  const list = $('#taskList');
+  const open = state.tasks.filter(t=>!t.done), done = state.tasks.filter(t=>t.done);
+  const badge = $('#taskBadge');
+  badge.hidden = open.length === 0; badge.textContent = open.length;
+  if(!state.tasks.length){
+    list.innerHTML = `<div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <h3>No active protocols</h3><p>Add one above — or just tell JARVIS "remind me to…"</p></div>`;
+    return;
+  }
+  const row = t => `<div class="task ${t.done?'done':''}" data-id="${t.id}">
+    <button class="tcheck" aria-label="${t.done?'Mark incomplete':'Mark complete'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+    <div class="tbody"><div class="title">${esc(t.title)}</div>
+      <div class="tmeta">${t.due ? `<span class="chip ${(!t.done && new Date(t.due) < new Date())?'late':'due'}">${(!t.done && new Date(t.due) < new Date())?'overdue · ':''}${fmtDue(t.due)}</span>`:''}${t.byAI?'<span class="chip ai">via jarvis</span>':''}</div>
+    </div>
+    <button class="tdel" aria-label="Delete task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+  </div>`;
+  list.innerHTML = open.map(row).join('') +
+    (done.length ? `<div class="section-label">Completed</div>` + done.map(row).join('') : '');
+}
+$('#taskList').addEventListener('click', e => {
+  const row = e.target.closest('.task'); if(!row) return;
+  const t = state.tasks.find(t => String(t.id) === row.dataset.id); if(!t) return;
+  if(e.target.closest('.tcheck')){ t.done = !t.done; t.notified = true; }
+  else if(e.target.closest('.tdel')){ state.tasks = state.tasks.filter(x=>x!==t); toast('Protocol removed'); }
+  else return;
+  renderTasks(); scheduleSave();
+});
+function addTaskFromUI(){
+  const title = $('#taskInput').value.trim(); if(!title) return;
+  state.tasks.unshift({id:Date.now(), title, due:$('#taskDue').value||'', done:false, notified:false, byAI:false, created:Date.now()});
+  $('#taskInput').value=''; $('#taskDue').value='';
+  renderTasks(); scheduleSave(); toast('Protocol added');
+}
+$('#taskAdd').addEventListener('click', addTaskFromUI);
+$('#taskInput').addEventListener('keydown', e => { if(e.key==='Enter') addTaskFromUI(); });
+
+/* due-time watcher: JARVIS announces reminders */
+setInterval(() => {
+  const now = Date.now();
+  state.tasks.forEach(t => {
+    if(!t.done && !t.notified && t.due && new Date(t.due).getTime() <= now){
+      t.notified = true;
+      const line = `Reminder, ${state.profile.name || 'sir'}: "${t.title}" is due now.`;
+      pushMsg({role:'assistant', content: line});
+      if(state.profile.speak) speak(line);
+      toast('Protocol due: '+t.title, 'gold');
+      renderTasks(); scheduleSave();
+    }
+  });
+}, 20_000);
+
+/* =============================================================
+   BRIEFING — live web-search compilation
+   ============================================================= */
+function renderBrief(){
+  const out = $('#briefOut');
+  if(!state.lastBrief){
+    out.innerHTML = `<div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0V9"/><line x1="12" y1="7" x2="17" y2="7"/><line x1="12" y1="11" x2="17" y2="11"/></svg>
+      <h3>No briefing yet</h3><p>Run one to get today's headlines and weather${state.profile.city ? ' for '+esc(state.profile.city):''}.</p></div>`;
+    return;
+  }
+  out.innerHTML = `<div class="brief-doc">
+    <span class="stamp">Compiled ${new Date(state.lastBrief.when).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+    <div class="body">${md(state.lastBrief.text)}</div>
+  </div>
+  <p class="brief-note">Compiled from live web search. Verify anything critical before acting on it.</p>`;
+}
+const WMO = {0:'clear sky',1:'mostly clear',2:'partly cloudy',3:'overcast',45:'fog',48:'icy fog',51:'light drizzle',53:'drizzle',55:'heavy drizzle',61:'light rain',63:'rain',65:'heavy rain',66:'freezing rain',71:'light snow',73:'snow',75:'heavy snow',80:'rain showers',81:'showers',82:'violent showers',95:'thunderstorm',96:'thunderstorm with hail',99:'severe thunderstorm'};
+async function liveWeather(city){
+  const g = await (await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(city)+'&count=1')).json();
+  if(!g.results || !g.results.length) throw new Error('city');
+  const {latitude, longitude, name, country} = g.results[0];
+  const w = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto`)).json();
+  const c = w.current, d = w.daily;
+  return `Live weather for ${name}, ${country}: ${WMO[c.weather_code]||'—'}, ${Math.round(c.temperature_2m)}°C (feels like ${Math.round(c.apparent_temperature)}°C), humidity ${c.relative_humidity_2m}%, wind ${Math.round(c.wind_speed_10m)} km/h. Today: high ${Math.round(d.temperature_2m_max[0])}°C, low ${Math.round(d.temperature_2m_min[0])}°C, rain chance ${d.precipitation_probability_max[0]}%.`;
+}
+
+$('#briefRun').addEventListener('click', async () => {
+  const btn = $('#briefRun'), lbl = $('#briefRunLbl');
+  btn.disabled = true; lbl.textContent = 'Compiling…'; setCore('thinking');
+  const city = state.profile.city;
+  try{
+    if(provider() === 'nvidia'){
+      if(!city){ toast('Set your city in settings first', 'gold'); throw new Error('nocity'); }
+      const wx = await liveWeather(city);
+      const nprompt = `Today is ${new Date().toDateString()}. ${wx}\n\nCompose a short spoken-style daily briefing (under 130 words, plain text, **bold** lead-ins): 1) that weather summarized naturally with one practical tip, 2) one line noting live headlines are unavailable on this link, 3) a closing line of dry, butler-like commentary. Start directly with the briefing.`;
+      const text = await callClaude([{role:'user', content:nprompt}], {maxTokens:600});
+      state.lastBrief = {text, when: Date.now()};
+      renderBrief(); scheduleSave();
+      if(state.profile.speak) speak(text); else setCore('idle');
+      btn.disabled = false; lbl.textContent = 'Run briefing';
+      return;
+    }
+    const prompt = `Today is ${new Date().toDateString()}. Search the web and produce a compact spoken-style daily briefing (under 180 words, plain text with **bold** lead-ins) with: 1) current weather ${city ? 'in '+city : '(ask no questions; pick global summary)'} , 2) three notable world/tech headlines from today, 3) one closing line of dry, butler-like commentary. No links, no preamble — start directly with the briefing.`;
+    const text = await callClaude([{role:'user', content:prompt}], {
+      tools:[{type:'web_search_20250305', name:'web_search'}], maxTokens:1200
+    });
+    if(!text) throw new Error('empty');
+    state.lastBrief = {text, when: Date.now()};
+    renderBrief(); scheduleSave();
+    if(state.profile.speak) speak(text); else setCore('idle');
+  }catch(e){
+    setCore('err'); setTimeout(()=>setCore('idle'), 2000);
+    if(e.message === 'city') toast('Could not find that city — check the spelling in settings', 'red');
+    else if(e.message !== 'nocity') toast('Briefing failed — check your connection and retry', 'red');
+    else setCore('idle');
+  }
+  btn.disabled = false; lbl.textContent = 'Run briefing';
+});
+
+/* =============================================================
+   MEMORY BANK
+   ============================================================= */
+function renderProfile(){
+  const p = state.profile;
+  $('#profileGrid').innerHTML = `
+    <div class="pcell"><small>Designation</small><b class="${p.name?'':'unset'}">${p.name?esc(p.name):'not set'}</b></div>
+    <div class="pcell"><small>Location</small><b class="${p.city?'':'unset'}">${p.city?esc(p.city):'not set'}</b></div>
+    <div class="pcell"><small>Voice replies</small><b>${p.speak?'On':'Off'}</b></div>
+    <div class="pcell"><small>Storage</small><b>${storageOK?(STANDALONE?'On this device':'Persistent'):'This session only'}</b></div>
+    ${STANDALONE?`<div class="pcell" style="grid-column:1/-1"><small>Neural link</small><b class="${state.profile.apiKey?'':'unset'}">${state.profile.apiKey?(provider()==='nvidia'?'NVIDIA · '+(state.profile.model||NVIDIA_DEFAULT_MODEL):'Anthropic · Claude'):'no API key — set in settings'}</b></div>`:''}`;
+}
+function renderNotes(){
+  const list = $('#noteList');
+  if(!state.notes.length){
+    list.innerHTML = `<div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 0-5 5c0 1.1.36 2.1.97 2.92A5 5 0 0 0 7 21h10a5 5 0 0 0-.97-11.08A4.98 4.98 0 0 0 17 7a5 5 0 0 0-5-5z"/></svg>
+      <h3>Memory bank empty</h3><p>Add a note here, or tell JARVIS "note that…" and it files it for you.</p></div>`;
+    return;
+  }
+  list.innerHTML = state.notes.map(n => `<div class="note" data-id="${n.id}">
+    <div class="nbody">${esc(n.text)}
+      <div class="nmeta">${n.byAI?'<span class="chip ai">via jarvis</span>':''}<span class="chip">${new Date(n.created).toLocaleDateString([], {day:'2-digit',month:'short'})}</span></div>
+    </div>
+    <button class="tdel" aria-label="Delete note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+  </div>`).join('');
+}
+$('#noteList').addEventListener('click', e => {
+  if(!e.target.closest('.tdel')) return;
+  const id = e.target.closest('.note').dataset.id;
+  state.notes = state.notes.filter(n => String(n.id) !== id);
+  renderNotes(); scheduleSave(); toast('Note purged');
+});
+function addNoteFromUI(){
+  const text = $('#noteInput').value.trim(); if(!text) return;
+  state.notes.unshift({id:Date.now(), text, byAI:false, created:Date.now()});
+  $('#noteInput').value = ''; renderNotes(); scheduleSave(); toast('Filed to memory bank');
+}
+$('#noteAdd').addEventListener('click', addNoteFromUI);
+$('#noteInput').addEventListener('keydown', e => { if(e.key==='Enter') addNoteFromUI(); });
+
+/* =============================================================
+   SETTINGS
+   ============================================================= */
+const dlg = $('#settings');
+$('#settingsBtn').addEventListener('click', () => {
+  $('#keyField').hidden = !STANDALONE;
+  $('#modelField').hidden = !STANDALONE;
+  $('#relayField').hidden = !STANDALONE;
+  $('#linkTest').hidden = !STANDALONE;
+  $('#diagOut').hidden = true;
+  $('#setKey').value = state.profile.apiKey || '';
+  $('#setModel').value = state.profile.model || '';
+  $('#setRelay').value = state.profile.relay || '';
+  $('#setName').value = state.profile.name;
+  $('#setCity').value = state.profile.city;
+  $('#setSpeak').setAttribute('aria-checked', String(state.profile.speak));
+  loadVoices();
+  dlg.showModal();
+});
+$('#linkTest').addEventListener('click', async function(){
+  /* apply what's typed in the fields right now, then test with it */
+  state.profile.apiKey = $('#setKey').value.trim();
+  state.profile.relay  = $('#setRelay').value.trim();
+  state.profile.model  = $('#setModel').value.trim();
+  scheduleSave();
+  const out = $('#diagOut'); out.hidden = false;
+  const lines = [];
+  const show = () => { out.innerHTML = lines.join('<br>'); };
+  const good = t => '<span class="good">✓ ' + t + '</span>';
+  const bad  = t => '<span class="bad">✗ ' + t + '</span>';
+  this.disabled = true; this.textContent = 'Testing…';
+
+  const key = state.profile.apiKey;
+  if(!key){ lines.push(bad('No API key. Paste your nvapi-… or sk-ant-… key above.')); show(); }
+  else{
+    lines.push(key.startsWith('nvapi-') ? good('Key format: NVIDIA')
+             : key.startsWith('sk-ant-') ? good('Key format: Anthropic')
+             : bad('Key format unrecognized — must start with nvapi- or sk-ant-'));
+    show();
+    if(provider() === 'nvidia'){
+      const relay = state.profile.relay;
+      if(!relay){
+        lines.push(bad('No relay URL set. NVIDIA usually blocks direct phone connections — deploy worker.js on Cloudflare (README step) and paste its URL above.'));
+        show();
+      }else{
+        try{
+          const h = await fetch(relay, {method:'GET'});
+          const j = await h.json().catch(()=> ({}));
+          lines.push(j['jarvis-relay'] === 'online' ? good('Relay online: ' + relay)
+                    : bad('That URL responds but is not the JARVIS relay (HTTP ' + h.status + '). Re-paste worker.js in the Cloudflare editor and Deploy.'));
+        }catch(e){
+          lines.push(bad('Relay unreachable. Check the URL — it should look like https://NAME.SUBDOMAIN.workers.dev with no spaces.'));
+        }
+        show();
+      }
+    }
+    /* live round-trip */
+    try{
+      const r = await callClaude([{role:'user', content:'Reply with exactly one word: ONLINE'}], {maxTokens:12});
+      lines.push(good('AI replied: "' + esc(r.slice(0,30)) + '" — LINK FULLY OPERATIONAL'));
+    }catch(e){
+      if(e.message === 'CORS') lines.push(bad('Connection blocked by the browser (CORS). This is the direct-NVIDIA block — the relay above fixes it.'));
+      else if(e.message === 'AUTH') lines.push(bad('Key rejected (401). The key is wrong, expired, or was regenerated — create a fresh one at build.nvidia.com and paste it above.'));
+      else if(/404/.test(e.message||'')) lines.push(bad('Model not found (404). Clear the NVIDIA model field to use the default.'));
+      else if(/429/.test(e.message||'')) lines.push(bad('Rate limited (429). Wait a minute and try again.'));
+      else lines.push(bad('Failed: ' + esc(e.message||'unknown') + '.'));
+    }
+    show();
+  }
+  this.disabled = false; this.textContent = 'Run link diagnostic';
+});
+
+$('#voiceTest').addEventListener('click', () => {
+  if(!('speechSynthesis' in window)){ toast('Speech not supported in this browser', 'gold'); return; }
+  loadVoices();
+  const u = new SpeechSynthesisUtterance('Good evening. I am JARVIS — this is the voice you have selected.');
+  const v = voices.find(v => v.voiceURI === $('#setVoice').value);
+  if(v) u.voice = v; else { const a = pickVoice(); if(a) u.voice = a; }
+  u.rate = 1.02; u.pitch = 0.92;
+  speechSynthesis.cancel(); speechSynthesis.speak(u);
+});
+$('#settingsClose').addEventListener('click', ()=> dlg.close());
+dlg.addEventListener('click', e => { if(e.target === dlg) dlg.close(); });
+$('#setSpeak').addEventListener('click', function(){
+  this.setAttribute('aria-checked', String(this.getAttribute('aria-checked') !== 'true'));
+});
+$('#settingsSave').addEventListener('click', () => {
+  state.profile.name = $('#setName').value.trim();
+  state.profile.city = $('#setCity').value.trim();
+  state.profile.speak = $('#setSpeak').getAttribute('aria-checked') === 'true';
+  state.profile.voiceURI = $('#setVoice').value;
+  if(STANDALONE){ state.profile.apiKey = $('#setKey').value.trim(); state.profile.model = $('#setModel').value.trim(); state.profile.relay = $('#setRelay').value.trim(); }
+  renderProfile(); scheduleSave(); dlg.close(); toast('Calibration applied');
+});
+let wipeArmed = false, wipeT;
+$('#wipeBtn').addEventListener('click', async function(){
+  if(!wipeArmed){
+    wipeArmed = true;
+    this.textContent = 'Tap again to confirm wipe';
+    clearTimeout(wipeT);
+    wipeT = setTimeout(()=>{ wipeArmed = false; this.textContent = 'Wipe all data'; }, 3500);
+    return;
+  }
+  clearTimeout(wipeT); wipeArmed = false; this.textContent = 'Wipe all data';
+  state = {profile:{name:'',city:'',speak:true,voiceURI:'',apiKey: STANDALONE ? state.profile.apiKey : ''}, tasks:[], notes:[], chat:[], lastBrief:null, booted:true};
+  try{ if(storageOK) await window.storage.delete(KEY); }catch(e){}
+  renderChat(); renderTasks(); renderNotes(); renderProfile(); renderBrief();
+  dlg.close(); toast('All systems wiped', 'gold');
+  greet(true);
+});
+
+/* =============================================================
+   BOOT SEQUENCE
+   ============================================================= */
+const bootLines = [
+  ['sys','INITIALISING KERNEL ………………… OK'],
+  ['sys','MOUNTING MEMORY BANK ……………… OK'],
+  ['sys','NEURAL LINK → CLAUDE CORE …… OK'],
+  ['sys','VOICE MATRIX ' + (SR ? '…………………………… OK' : '……………… UNAVAILABLE')],
+  ['sys','HUD RENDER PIPELINE ……………… OK'],
+  ['ok','ALL SYSTEMS NOMINAL. WELCOME.']
+];
+let bootDone = false;
+function finishBoot(){
+  if(bootDone) return; bootDone = true;
+  $('#boot').classList.add('done');
+  setTimeout(()=> $('#boot').remove(), 600);
+  greet();
+}
+function runBoot(){
+  if(REDUCED){ finishBoot(); return; }
+  const log = $('#bootLog');
+  bootLines.forEach((l, i) => setTimeout(() => {
+    if(bootDone) return;
+    const d = document.createElement('div'); d.className = l[0]; d.textContent = '> ' + l[1];
+    log.appendChild(d);
+  }, 320*i + 250));
+  setTimeout(finishBoot, 320*bootLines.length + 850);
+}
+$('#skipBoot').addEventListener('click', finishBoot);
+
+function greet(fresh){
+  if(state.chat.length && !fresh) return;   // returning user keeps their transcript
+  const h = new Date().getHours();
+  const part = h < 5 ? 'a very late hour' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+  const name = state.profile.name;
+  let line = name
+    ? `Good ${part}, ${name}. All systems are online. How may I assist?`
+    : `Good ${part}. All systems are online. I don't believe we've been introduced — what shall I call you? You may speak by tapping the core, or simply type.`;
+  if(STANDALONE && !state.profile.apiKey)
+    line = `Good ${part}. I'm installed and ready — one step remains: open **settings (gear icon)** and paste your API key (Anthropic or NVIDIA) to connect my neural link. Everything you save stays on this device.`;
+  pushMsg({role:'assistant', content: line});
+  if(state.profile.speak && !REDUCED) speak(line);
+}
+
+/* =============================================================
+   INIT
+   ============================================================= */
+if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+}
+
+(async function init(){
+  /* mobile keyboard: size the app to the visual viewport so the composer stays visible */
+  if(window.visualViewport){
+    const vv = window.visualViewport;
+    const fit = () => { $('#app').style.height = vv.height + 'px'; scrollChat(true); };
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+    fit();
+  }
+  /* flush pending saves when the app is backgrounded or closed */
+  const flushSave = () => { clearTimeout(saveTimer); saveState(); };
+  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') flushSave(); });
+  addEventListener('pagehide', flushSave);
+
+  await loadState();
+  renderChat(); renderTasks(); renderNotes(); renderProfile(); renderBrief();
+  setCore('idle');
+  runBoot();
+})();
+</script>
+</body>
+</html>
